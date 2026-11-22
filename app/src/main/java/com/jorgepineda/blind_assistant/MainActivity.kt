@@ -3,12 +3,11 @@ package com.jorgepineda.blind_assistant
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.text.SegmentFinder
 import android.util.Log
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.core.CameraExecutor
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -22,10 +21,16 @@ class MainActivity : AppCompatActivity() {
 
     // Referencing cam visual component in XML
     private lateinit var viewFinder: PreviewView
-
+    private lateinit var debugHudText: TextView
 
     // STRING 1: Exclusively for frame analysis
     private lateinit var cameraExecutor: ExecutorService
+
+    //Debug HUD variables
+    private var totalFrames = 0L
+    private var framesInWindow = 0
+    private var lastFpsTimestamp = System.currentTimeMillis()
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) {isGranted: Boolean ->
@@ -48,6 +53,7 @@ class MainActivity : AppCompatActivity() {
 
         //Link kotlin var to XML ID
         viewFinder = findViewById(R.id.viewFinder)
+        debugHudText = findViewById(R.id.debugHudText)
 
         //Start String 1 in the background
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -98,10 +104,32 @@ class MainActivity : AppCompatActivity() {
                 .build()
                 .also {
                     it.setAnalyzer(cameraExecutor) { imageProxy ->
-                        //Get frame here for IA model ...
-                        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-                        Log.d("CameraX_HILO1", "Frame recibido: ${imageProxy.width}x${imageProxy.height} | Rotation: $rotationDegrees")
-                        //Free actual frame for the next to enter
+                        totalFrames++
+                        framesInWindow++
+
+                        val currentTime = System.currentTimeMillis()
+                        val elapsedMs = currentTime - lastFpsTimestamp
+
+                        //Refresh HUD every 500ms
+                        if (elapsedMs >= 500){
+                            val fps = (framesInWindow * 1000.0) / elapsedMs
+                            val width = imageProxy.width
+                            val height = imageProxy.height
+                            val rotation = imageProxy.imageInfo.rotationDegrees
+
+                            val hudMessage = "Hilo 1: OK\n" +
+                                    "Frames: $totalFrames\n" +
+                                    "FPS: ${"%.1f".format(fps)}\n" +
+                                    "Res: ${width}x${height} | Rot: ${rotation}°"
+
+                            //Modify UI only in main string
+                            runOnUiThread { debugHudText.text = hudMessage }
+
+                            framesInWindow = 0
+                            lastFpsTimestamp = currentTime
+                        }
+
+                        //Close frame to free CameraX buffer
                         imageProxy.close()
                     }
                 }
