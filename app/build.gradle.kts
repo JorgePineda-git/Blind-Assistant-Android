@@ -25,6 +25,11 @@ android {
             }
         }
     }
+
+    androidResources {
+        noCompress += "tflite"
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -47,4 +52,8 @@ dependencies {
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
+
+    //Google LiteRT (Edge AI inference engine: CPU, GPU and NPU)
+    implementation("com.google.ai.edge.litert:litert:1.0.1")
+    implementation("com.google.ai.edge.litert:litert-gpu:1.0.1")
 }
