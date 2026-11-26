@@ -2,8 +2,13 @@ package com.jorgepineda.blind_assistant
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.Matrix
 import android.os.Bundle
 import android.util.Log
+import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,6 +19,9 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import com.jorgepineda.blind_assistant.ml.AcceleratorType
+import com.jorgepineda.blind_assistant.ml.ObjectDetector
+import com.jorgepineda.blind_assistant.ml.YoloDetector
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -22,14 +30,20 @@ class MainActivity : AppCompatActivity() {
     // Referencing cam visual component in XML
     private lateinit var viewFinder: PreviewView
     private lateinit var debugHudText: TextView
+    private lateinit var btnCpu: Button
+    private lateinit var btnGpu: Button
+    private lateinit var btnNpu: Button
 
-    // STRING 1: Exclusively for frame analysis
+    //Secondary string for frames analysis and inference
     private lateinit var cameraExecutor: ExecutorService
 
+    //IA Engine (using interface "Plug & Play")
+    private lateinit var objectDetector: ObjectDetector
+
     //Debug HUD variables
-    private var totalFrames = 0L
     private var framesInWindow = 0
     private var lastFpsTimestamp = System.currentTimeMillis()
+    private var currentFps = 0.0
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -54,11 +68,62 @@ class MainActivity : AppCompatActivity() {
         //Link kotlin var to XML ID
         viewFinder = findViewById(R.id.viewFinder)
         debugHudText = findViewById(R.id.debugHudText)
+        btnCpu = findViewById(R.id.btnCpu)
+        btnGpu = findViewById(R.id.btnGpu)
+        btnNpu = findViewById(R.id.btnNpu)
 
-        //Start String 1 in the background
         cameraExecutor = Executors.newSingleThreadExecutor()
+        objectDetector = YoloDetector(this, modelPath = "yolov8n_int8.tflite")
+
+        setupHardwareButtons()
+
+        //Default, starts in CPU in the background
+        switchAccelerator(AcceleratorType.CPU)
 
         checkCameraPermission()
+    }
+
+
+    private fun setupHardwareButtons() {
+        btnCpu.setOnClickListener { switchAccelerator(AcceleratorType.CPU) }
+        btnGpu.setOnClickListener { switchAccelerator(AcceleratorType.GPU) }
+        btnNpu.setOnClickListener { switchAccelerator(AcceleratorType.NPU) }
+    }
+
+
+    private fun switchAccelerator(target: AcceleratorType) {
+        debugHudText.text = "Cambiando a $target..."
+        setButtonsEnabled(false)
+
+        // Initialize accelerator on secondary string
+        cameraExecutor.execute {
+            objectDetector.initialize(target)
+            val active = objectDetector.activeAccelerator
+            val note = objectDetector.statusNote
+
+            runOnUiThread {
+                updateButtonHighlight(active)
+                setButtonsEnabled(true)
+                if (active != target) {
+                    Toast.makeText(this, note, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun setButtonsEnabled(enabled: Boolean) {
+        btnCpu.isEnabled = enabled
+        btnGpu.isEnabled = enabled
+        btnNpu.isEnabled = enabled
+    }
+
+    private fun updateButtonHighlight(active: AcceleratorType) {
+        val activeColor = ColorStateList.valueOf(Color.parseColor("#2E7D32"))   // Active green
+        val inactiveColor = ColorStateList.valueOf(Color.parseColor("#424242")) // Inactive gray
+
+        btnCpu.backgroundTintList = if (active == AcceleratorType.CPU) activeColor else inactiveColor
+        btnGpu.backgroundTintList = if (active == AcceleratorType.GPU) activeColor else inactiveColor
+        btnNpu.backgroundTintList = if (active == AcceleratorType.NPU) activeColor else inactiveColor
     }
 
     private fun checkCameraPermission(){
@@ -76,7 +141,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-
 
     private fun onCameraPermissionGranted(){
         //Permission confirmed, run CameraX
@@ -101,38 +165,63 @@ class MainActivity : AppCompatActivity() {
             val imageAnalyzer = ImageAnalysis.Builder()
                 //Discard late frames to prevent lag
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                //Conversion to RGBA_8888
+                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build()
-                .also {
-                    it.setAnalyzer(cameraExecutor) { imageProxy ->
-                        totalFrames++
-                        framesInWindow++
-
-                        val currentTime = System.currentTimeMillis()
-                        val elapsedMs = currentTime - lastFpsTimestamp
-
-                        //Refresh HUD every 500ms
-                        if (elapsedMs >= 500){
-                            val fps = (framesInWindow * 1000.0) / elapsedMs
-                            val width = imageProxy.width
-                            val height = imageProxy.height
+                .also { analyzer ->
+                    analyzer.setAnalyzer(cameraExecutor) { imageProxy ->
+                        try {
+                            val rawBitmap = imageProxy.toBitmap()
                             val rotation = imageProxy.imageInfo.rotationDegrees
+                            val uprightBitmap = rotateBitmap(rawBitmap, rotation)
 
-                            val hudMessage = "Hilo 1: OK\n" +
-                                    "Frames: $totalFrames\n" +
-                                    "FPS: ${"%.1f".format(fps)}\n" +
-                                    "Res: ${width}x${height} | Rot: ${rotation}°"
+                            // Execute YOLOv8 inference (String 2)
+                            val result = objectDetector.detect(uprightBitmap)
 
-                            //Modify UI only in main string
-                            runOnUiThread { debugHudText.text = hudMessage }
+                            // Free temporary bitmaps to avoid memory leaks
+                            if (uprightBitmap !== rawBitmap) {
+                                uprightBitmap.recycle()
+                            }
+                            rawBitmap.recycle()
 
-                            framesInWindow = 0
-                            lastFpsTimestamp = currentTime
+                            // Calculate real inference FPS every 500 ms
+                            framesInWindow++
+                            val now = System.currentTimeMillis()
+                            val elapsed = now - lastFpsTimestamp
+                            if (elapsed >= 500) {
+                                currentFps = (framesInWindow * 1000.0) / elapsed
+                                framesInWindow = 0
+                                lastFpsTimestamp = now
+                            }
+
+                            // Format top 3 detected objects for the HUD debug
+                            val objectsText = if (result.detections.isEmpty()) {
+                                "Ninguno"
+                            } else {
+                                result.detections
+                                    .take(3)
+                                    .joinToString(", ") {
+                                        "${it.label} (${(it.confidence * 100).toInt()}%)"
+                                    }
+                            }
+
+                            val hudMessage = "HW: ${result.activeAccelerator} (${result.statusNote})\n" +
+                                    "Latencia: ${result.inferenceTimeMs} ms | FPS: ${"%.1f".format(currentFps)}\n" +
+                                    "Objs (${result.detections.size}): $objectsText"
+
+                            runOnUiThread {
+                                debugHudText.text = hudMessage
+                            }
+                        } catch (e: Exception) {
+                            Log.e("YoloPipeline", "Error procesando frame", e)
+                        } finally {
+                            // ALWAYS free CameraX frame
+                            imageProxy.close()
                         }
-
-                        //Close frame to free CameraX buffer
-                        imageProxy.close()
                     }
                 }
+
+
             //Select back camera as the main
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
@@ -153,10 +242,16 @@ class MainActivity : AppCompatActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    private fun rotateBitmap(bitmap: Bitmap, rotationDegrees: Int): Bitmap {
+        if (rotationDegrees == 0) return bitmap
+        val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
 
     override fun onDestroy() {
         super.onDestroy()
-        //Turn off secondary string by closing app
+        //Queue engine closing before shutdown the string
+        cameraExecutor.execute { objectDetector.close() }
         cameraExecutor.shutdown()
     }
 }

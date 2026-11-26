@@ -56,4 +56,5 @@ dependencies {
     //Google LiteRT (Edge AI inference engine: CPU, GPU and NPU)
     implementation("com.google.ai.edge.litert:litert:1.0.1")
     implementation("com.google.ai.edge.litert:litert-gpu:1.0.1")
+    implementation("com.google.ai.edge.litert:litert-gpu-api:1.0.1")
 }

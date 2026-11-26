@@ -27,11 +27,47 @@
         android:layout_marginTop="48dp"
         android:background="#99000000"
         android:padding="10dp"
-        android:text="Hilo 1: Iniciando..."
+        android:text="Iniciando Motor IA..."
         android:textColor="#00FF00"
-        android:textSize="14sp"
-        android:fontFamily="monospace"
+        android:textSize="13sp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+    
+    <!-- Floating hardware accelerator selector menu-->
+    <LinearLayout
+        android:id="@+id/hwSelectorLayout"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="36dp"
+        android:background="#99000000"
+        android:orientation="horizontal"
+        android:padding="6dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
 
+        <Button
+            android:id="@+id/btnCpu"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginEnd="6dp"
+            android:text="CPU"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btnGpu"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginEnd="6dp"
+            android:text="GPU"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btnNpu"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:text="NPU"
+            android:textSize="12sp" />
+
+    </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

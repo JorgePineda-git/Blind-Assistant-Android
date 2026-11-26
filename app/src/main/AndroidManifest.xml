@@ -15,6 +15,15 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.BlindAssistant">
+
+        <!-- Desbloquea el acceso a la GPU (OpenCL) en Android 12+ -->
+        <uses-native-library
+            android:name="libOpenCL.so"
+            android:required="false" />
+        <uses-native-library
+            android:name="libOpenCL-pixel.so"
+            android:required="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
