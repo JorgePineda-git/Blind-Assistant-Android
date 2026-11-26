@@ -16,7 +16,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BlindAssistant">
 
-        <!-- Desbloquea el acceso a la GPU (OpenCL) en Android 12+ -->
+        <!-- Unlock access for GPU (OpenCL, Android 12+) -->
         <uses-native-library
             android:name="libOpenCL.so"
             android:required="false" />

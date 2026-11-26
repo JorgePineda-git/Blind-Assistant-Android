@@ -50,9 +50,8 @@ class YoloDetector(
         .apply { order(ByteOrder.nativeOrder()) }
 
 
-    // Detectado automáticamente al cargar el modelo: NCHW [1,3,640,640] vs NHWC [1,640,640,3]
+    // Automatic detection when uploading model: NCHW [1,3,640,640] vs NHWC [1,640,640,3]
     private var isInputNchw = false
-
     private var outputElements = 84
     private var outputBoxes = 8400
     private var outputBuffer: Array<Array<FloatArray>> =
@@ -169,11 +168,11 @@ class YoloDetector(
     }
 
     private fun setupTensors(interp: Interpreter) {
-        // Detectar si la entrada espera canales primero (NCHW) o al final (NHWC)
+        // Detect expected inputs, first (NCHW) or at the end (NHWC)
         val inShape = interp.getInputTensor(0).shape()
         isInputNchw = (inShape.size == 4 && inShape[1] == NUM_CHANNELS)
 
-        // Detectar forma de salida dinámicamente (ej. [1, 84, 8400])
+        // Detect otuput shape (ej. [1, 84, 8400])
         val outShape = interp.getOutputTensor(0).shape()
         if (outShape.size == 3) {
             outputElements = outShape[1]
@@ -193,7 +192,7 @@ class YoloDetector(
 
         val numPixels = INPUT_SIZE * INPUT_SIZE
         if (isInputNchw) {
-            // Formato planar NCHW [1, 3, 640, 640]: todo R, luego todo G, luego todo B
+            //NCHW Planar format [1, 3, 640, 640]: all R, then G, then B
             val gOffset = numPixels
             val bOffset = numPixels * 2
             for (i in 0 until numPixels) {
@@ -203,7 +202,7 @@ class YoloDetector(
                 floatValues[bOffset + i] = (pixel and 0xFF) / 255.0f
             }
         } else {
-            // Formato intercalado NHWC [1, 640, 640, 3]: R, G, B, R, G, B...
+            //Interleaved NHWC format [1, 640, 640, 3]: R, G, B, R, G, B...
             var idx = 0
             for (i in 0 until numPixels) {
                 val pixel = intValues[i]
@@ -335,5 +334,3 @@ class YoloDetector(
         }
     }
 }
-
-

@@ -26,8 +26,6 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
-
-    // Referencing cam visual component in XML
     private lateinit var viewFinder: PreviewView
     private lateinit var debugHudText: TextView
     private lateinit var btnCpu: Button
@@ -226,7 +224,6 @@ class MainActivity : AppCompatActivity() {
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
             try{
-                //Unbind any previous use before linking again
                 cameraProvider.unbindAll()
 
                 //Connect cam,preview and analyzer to lifecycle
