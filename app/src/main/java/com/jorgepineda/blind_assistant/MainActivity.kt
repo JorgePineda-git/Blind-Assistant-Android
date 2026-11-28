@@ -22,6 +22,9 @@ import androidx.core.content.ContextCompat
 import com.jorgepineda.blind_assistant.ml.AcceleratorType
 import com.jorgepineda.blind_assistant.ml.ObjectDetector
 import com.jorgepineda.blind_assistant.ml.YoloDetector
+import com.jorgepineda.blind_assistant.feedback.FeedbackManager
+import com.jorgepineda.blind_assistant.feedback.FilteredObstacle
+import com.jorgepineda.blind_assistant.feedback.ObstacleFilter
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -37,6 +40,10 @@ class MainActivity : AppCompatActivity() {
 
     //IA Engine (using interface "Plug & Play")
     private lateinit var objectDetector: ObjectDetector
+
+    //String 3: Obstacle filter + TTS and vibration
+    private lateinit var obstacleFilter: ObstacleFilter
+    private lateinit var feedbackManager: FeedbackManager
 
     //Debug HUD variables
     private var framesInWindow = 0
@@ -72,6 +79,9 @@ class MainActivity : AppCompatActivity() {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
         objectDetector = YoloDetector(this, modelPath = "yolov8n_int8.tflite")
+
+        obstacleFilter = ObstacleFilter()
+        feedbackManager = FeedbackManager(this)
 
         setupHardwareButtons()
 
@@ -176,6 +186,10 @@ class MainActivity : AppCompatActivity() {
                             // Execute YOLOv8 inference (String 2)
                             val result = objectDetector.detect(uprightBitmap)
 
+                            //String 3: Whitelist + persistency and announce
+                            val filteredObstacles = obstacleFilter.filter(result.detections)
+                            feedbackManager.announce(filteredObstacles)
+
                             // Free temporary bitmaps to avoid memory leaks
                             if (uprightBitmap !== rawBitmap) {
                                 uprightBitmap.recycle()
@@ -205,7 +219,8 @@ class MainActivity : AppCompatActivity() {
 
                             val hudMessage = "HW: ${result.activeAccelerator} (${result.statusNote})\n" +
                                     "Latencia: ${result.inferenceTimeMs} ms | FPS: ${"%.1f".format(currentFps)}\n" +
-                                    "Objs (${result.detections.size}): $objectsText"
+                                    "Objs (${result.detections.size}): $objectsText" +
+                                    "\nVoz ES: ${filteredObstacles.firstOrNull()?.spanishName ?: "Ninguno"}"
 
                             runOnUiThread {
                                 debugHudText.text = hudMessage
@@ -250,5 +265,6 @@ class MainActivity : AppCompatActivity() {
         //Queue engine closing before shutdown the string
         cameraExecutor.execute { objectDetector.close() }
         cameraExecutor.shutdown()
+        feedbackManager.shutdown()
     }
 }
